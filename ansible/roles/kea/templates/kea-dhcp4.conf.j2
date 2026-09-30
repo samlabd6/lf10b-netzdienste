@@ -1,0 +1,49 @@
+{
+  "Dhcp4": {
+    "interfaces-config": {
+      "interfaces": [ "{{ ansible_default_ipv4.interface }}" ]
+    },
+    "control-socket": {
+      "socket-type": "unix",
+      "socket-name": "/run/kea/kea4-ctrl-socket"
+    },
+    "lease-database": {
+      "type": "memfile",
+      "persist": true,
+      "name": "/var/lib/kea/kea-leases4.csv",
+      "lfc-interval": 3600
+    },
+    "valid-lifetime": {{ dhcp_valid_lifetime }},
+    "renew-timer": {{ dhcp_renew_timer }},
+    "rebind-timer": {{ dhcp_rebind_timer }},
+    "option-data": [
+      { "name": "domain-name-servers", "data": "{{ dns_server }}" },
+      { "name": "domain-name",         "data": "{{ lab_domain }}" },
+      { "name": "domain-search",       "data": "{{ lab_domain }}" },
+      { "name": "ntp-servers",         "data": "{{ ntp_server }}" }
+    ],
+    "subnet4": [
+      {
+        "id": 1,
+        "subnet": "{{ lab_net }}/{{ lab_prefix }}",
+        "pools": [ { "pool": "{{ dhcp_pool }}" } ],
+        "option-data": [
+          { "name": "routers", "data": "{{ lab_gateway }}" }
+        ],
+        "reservations": [
+{% set res = lab_hosts | selectattr('mac', 'defined') | list %}
+{% for h in res %}
+          { "hw-address": "{{ h.mac | lower }}", "ip-address": "{{ h.ip }}", "hostname": "{{ h.name }}" }{{ "," if not loop.last }}
+{% endfor %}
+        ]
+      }
+    ],
+    "loggers": [
+      {
+        "name": "kea-dhcp4",
+        "output-options": [ { "output": "stdout" } ],
+        "severity": "INFO"
+      }
+    ]
+  }
+}

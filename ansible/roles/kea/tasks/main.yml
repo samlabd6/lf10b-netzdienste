@@ -1,0 +1,39 @@
+- name: Deploy and validate Kea configuration
+  block:
+    - name: "Write Kea configuration (backup keeps the previous version as a timestamped copy)"
+      ansible.builtin.template:
+        src: kea-dhcp4.conf.j2
+        dest: /etc/kea/kea-dhcp4.conf        # the path the service really uses
+        owner: root
+        group: _kea                          # the service user _kea reads the file via the group
+        mode: "0640"
+        backup: true
+      register: kea_conf
+      notify: restart kea                    # restart only at the end, and only if everything succeeded
+
+    - name: Validate the configuration as the Kea service user
+      ansible.builtin.command: runuser -u _kea -- kea-dhcp4 -t /etc/kea/kea-dhcp4.conf   # same rights as the real service, no root bypass
+      changed_when: false
+
+  rescue:
+    - name: Check failed, restore the previous configuration
+      ansible.builtin.copy:
+        src: "{{ kea_conf.backup_file }}"
+        dest: /etc/kea/kea-dhcp4.conf
+        remote_src: true
+      when: kea_conf.backup_file is defined
+
+    - name: Stop with a clear message
+      ansible.builtin.fail:
+        msg: "Kea config invalid, previous version restored. Details: sudo runuser -u _kea -- kea-dhcp4 -t /etc/kea/kea-dhcp4.conf"
+
+- name: Remove the old staging file
+  ansible.builtin.file:
+    path: /etc/kea/kea-dhcp4.conf.new
+    state: absent
+
+- name: Kea running
+  ansible.builtin.systemd:
+    name: kea-dhcp4-server
+    state: started
+    enabled: true

@@ -1,0 +1,25 @@
+- name: Base packages
+  ansible.builtin.apt:
+    name:
+      - qemu-guest-agent           # lets Proxmox show the IP and shut down cleanly
+      - bind9-dnsutils             # dig, for DNS tests
+      - curl                       # HTTP tests of exporters
+      - vim
+      - htop
+      - prometheus-node-exporter   # host metrics on port 9100
+    update_cache: true             # apt update before installing
+    cache_valid_time: 3600         # but not more than once per hour
+
+- name: Timezone
+  community.general.timezone:
+    name: Europe/Berlin
+
+- name: Guest agent and node_exporter running
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started                 # start now
+    enabled: true                  # start on boot
+  loop:
+    - qemu-guest-agent
+    - prometheus-node-exporter
+

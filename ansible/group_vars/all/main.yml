@@ -1,0 +1,34 @@
+lab_domain: lab.intern
+lab_net: 10.10.10.0
+lab_prefix: 24
+lab_gateway: 10.10.10.1
+dns_server: 10.10.10.10
+ntp_server: 10.10.10.10
+
+# Forwarders of BIND. Replace with the local DNS server if external DNS is blocked
+upstream_dns:
+  - 1.1.1.1
+  - 9.9.9.9
+
+# Increase on every zone change (format YYYYMMDDnn)
+dns_serial: 2026093001
+
+# Single source of truth for DNS records and DHCP reservations
+lab_hosts:
+  - { name: pve,      ip: 10.10.10.1 }
+  - { name: net01,    ip: 10.10.10.10 }
+  - { name: mon01,    ip: 10.10.10.20 }
+  - { name: client01, ip: 10.10.10.50, mac: "BC:24:11:00:00:50" }
+
+dhcp_pool: "10.10.10.100 - 10.10.10.199"
+dhcp_valid_lifetime: 28800     # lease time 8 h
+dhcp_renew_timer: 14400        # T1 = 4 h, client tries to renew
+dhcp_rebind_timer: 25200       # T2 = 7 h, client asks any server
+
+# Backup targets (Phase 7)
+backup_laptop_ip: 192.168.88.36          # replace with LAPTOP_IP
+b2_bucket: lf10b-backup                  # replace with your bucket name
+restic_password: "{{ vault_restic_password }}"
+
+grafana_admin_password: "{{ vault_grafana_admin_password }}"
+

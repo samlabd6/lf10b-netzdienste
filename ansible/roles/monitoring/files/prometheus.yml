@@ -1,0 +1,56 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # the monitoring monitors itself
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels: { host: "mon01" }
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
+        labels: { host: "mon01" }
+
+  # host metrics (RAM, disk, CPU, backup metrics)
+  - job_name: node
+    static_configs:
+      - targets: ["10.10.10.10:9100"]
+        labels: { host: "net01" }
+      - targets: ["10.10.10.20:9100"]
+        labels: { host: "mon01" }
+      - targets: ["10.10.10.1:9100"]
+        labels: { host: "pve" }
+
+  # DHCP metrics
+  - job_name: kea
+    static_configs:
+      - targets: ["10.10.10.10:9547"]
+        labels: { host: "net01" }
+
+  # Grafana web UI answers
+  - job_name: grafana_probe
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ["http://grafana:3000/api/health"]
+        labels: { host: "mon01" }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+

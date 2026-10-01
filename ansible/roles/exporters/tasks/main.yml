@@ -1,0 +1,38 @@
+- name: Python venv support
+  ansible.builtin.apt:
+    name: python3-venv
+    state: present
+
+- name: Venv for kea-exporter
+  ansible.builtin.command: python3 -m venv /opt/kea-exporter   # isolated Python install, does not touch system packages
+  args:
+    creates: /opt/kea-exporter/bin/python                      # only once
+
+- name: Install kea-exporter
+  ansible.builtin.pip:
+    name: kea-exporter
+    virtualenv: /opt/kea-exporter
+
+- name: kea-exporter systemd unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/kea-exporter.service
+    content: |
+      [Unit]
+      Description=Prometheus exporter for Kea
+      After=kea-dhcp4-server.service
+
+      [Service]
+      ExecStart=/opt/kea-exporter/bin/kea-exporter --address 0.0.0.0 --port 9547 /run/kea/kea4-ctrl-socket
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: restart kea exporter
+
+- name: kea-exporter running
+  ansible.builtin.systemd:
+    name: kea-exporter
+    state: started
+    enabled: true
+    daemon_reload: true
+

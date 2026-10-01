@@ -1,0 +1,68 @@
+groups:
+  - name: availability
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "{{ $labels.job }} on {{ $labels.host }} is down" }
+
+      - alert: GrafanaDown
+        expr: probe_success{job="grafana_probe"} == 0
+        for: 2m
+        labels: { severity: warning }
+
+  - name: resources
+    rules:
+      - alert: MemoryHigh
+        expr: 1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "RAM usage on {{ $labels.host }} above 90 %" }
+
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.15
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Less than 15 % free on {{ $labels.host }} {{ $labels.mountpoint }}" }
+
+      - alert: DiskWillFillIn24h
+        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}[6h], 24 * 3600) < 0
+        for: 30m
+        labels: { severity: warning }
+        annotations: { summary: "Disk {{ $labels.mountpoint }} on {{ $labels.host }} will be full within 24 h" }
+
+  - name: backup
+    rules:
+      - alert: BackupFailed
+        expr: restic_backup_success == 0
+        labels: { severity: critical }
+        annotations: { summary: "Last backup of {{ $labels.host }} to {{ $labels.repo }} failed" }
+
+      - alert: BackupTooOld
+        expr: time() - restic_last_success_timestamp_seconds > 7200
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "No successful backup of {{ $labels.host }} to {{ $labels.repo }} for more than 2 h" }
+
+  - name: updates
+    rules:
+      - alert: UpdatesPending
+        expr: sum by (host) (apt_upgrades_pending) > 0
+        for: 2d
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.host }} has pending updates for more than 2 days" }
+
+      - alert: RebootRequired
+        expr: node_reboot_required == 1
+        for: 1d
+        labels: { severity: warning }
+
+  - name: dhcp
+    rules:
+      - alert: DhcpPoolUsageHigh
+        expr: kea_dhcp4_addresses_assigned_total / kea_dhcp4_addresses_total > 0.8
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "DHCP pool on {{ $labels.host }} more than 80 % used" }
+

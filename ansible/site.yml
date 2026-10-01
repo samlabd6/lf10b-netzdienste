@@ -6,3 +6,20 @@
 
 - hosts: monitoring
   roles: [monitoring, restic]
+- hosts: all
+  roles: [common]
+
+- hosts: netdienste
+  roles: [kea, bind, chrony, exporters, restic]
+
+- hosts: monitoring
+  roles: [monitoring, restic]
+- hosts: all
+  roles: [common]
+
+- hosts: netdienste
+  roles: [kea, bind, chrony, exporters, restic]
+
+- hosts: monitoring
+  roles: [monitoring, restic]
+

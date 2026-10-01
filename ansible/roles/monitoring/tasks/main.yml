@@ -1,0 +1,79 @@
+- name: Keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Docker apt key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Docker repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    content: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable\n"
+
+- name: Install Docker
+  ansible.builtin.apt:
+    name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+    update_cache: true
+
+- name: Monitoring directories
+  ansible.builtin.file:
+    path: "/opt/monitoring/{{ item }}"
+    state: directory
+  loop:
+    - prometheus
+    - alertmanager
+    - blackbox
+    - grafana/provisioning/datasources
+    - grafana/provisioning/dashboards
+    - grafana/dashboards
+
+- name: Config files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/opt/monitoring/{{ item.dest }}"
+  loop:
+    - { src: prometheus.yml,      dest: prometheus/prometheus.yml }
+    - { src: alerts.yml,          dest: prometheus/alerts.yml }
+    - { src: blackbox.yml,        dest: blackbox/blackbox.yml }
+    - { src: datasource.yml,      dest: grafana/provisioning/datasources/datasource.yml }
+    - { src: dashboards.yml,      dest: grafana/provisioning/dashboards/dashboards.yml }
+  register: monitoring_config
+
+- name: Alertmanager config (contains the webhook from the vault)
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: /opt/monitoring/alertmanager/alertmanager.yml
+    owner: "65534"                 # the Alertmanager container runs as user nobody (65534)
+    group: "65534"
+    mode: "0440"
+  register: alertmanager_config
+
+- name: Dashboards as code
+  ansible.builtin.copy:
+    src: dashboards/
+    dest: /opt/monitoring/grafana/dashboards/
+
+- name: Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/monitoring/docker-compose.yml
+    mode: "0600"
+
+- name: Start stack
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: /opt/monitoring
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr or 'Created' in compose_up.stderr"
+
+- name: Reload after config change
+  ansible.builtin.command: docker compose restart prometheus alertmanager blackbox
+  args:
+    chdir: /opt/monitoring
+  when: monitoring_config.changed or alertmanager_config.changed
+

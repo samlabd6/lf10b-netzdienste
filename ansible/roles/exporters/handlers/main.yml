@@ -1,0 +1,3 @@
+- name: restart kea exporter
+  ansible.builtin.systemd: { name: kea-exporter, state: restarted, daemon_reload: true }
+

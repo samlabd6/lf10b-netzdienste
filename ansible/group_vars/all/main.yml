@@ -30,10 +30,4 @@ backup_laptop_ip: 192.168.88.36          # replace with LAPTOP_IP
 b2_bucket: lf10b-backup                  # replace with your bucket name
 restic_password: "{{ vault_restic_password }}"
 
-grafana_admin_password: "{{ vault_grafana_admin_password }}"
-
-
-# Notifications (5.6): Discord webhook from the vault; e-mail optional
-alert_discord_webhook: "{{ vault_discord_webhook | default('') }}"
-alert_email_to: "samuelabdeta66@gmail.com"
-
+alert_discord_webhook: "{{ vault_discord_webhook | default('') }}" 

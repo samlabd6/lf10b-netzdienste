@@ -1,79 +1,57 @@
-- name: Keyring directory
-  ansible.builtin.file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: "0755"
-
-- name: Docker apt key
-  ansible.builtin.get_url:
-    url: https://download.docker.com/linux/debian/gpg
-    dest: /etc/apt/keyrings/docker.asc
-    mode: "0644"
-
-- name: Docker repository
-  ansible.builtin.copy:
-    dest: /etc/apt/sources.list.d/docker.list
-    content: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable\n"
-
-- name: Install Docker
+- name: Install Prometheus and helper tools
   ansible.builtin.apt:
-    name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+    name: [prometheus, curl, jq]     # prometheus: server + promtool; jq: reads JSON in the scripts
+    state: present
     update_cache: true
 
-- name: Monitoring directories
-  ansible.builtin.file:
-    path: "/opt/monitoring/{{ item }}"
-    state: directory
-  loop:
-    - prometheus
-    - alertmanager
-    - blackbox
-    - grafana/provisioning/datasources
-    - grafana/provisioning/dashboards
-    - grafana/dashboards
-
-- name: Config files
+- name: Alarm rules (checked with promtool before activating)
   ansible.builtin.copy:
-    src: "{{ item.src }}"
-    dest: "/opt/monitoring/{{ item.dest }}"
-  loop:
-    - { src: prometheus.yml,      dest: prometheus/prometheus.yml }
-    - { src: alerts.yml,          dest: prometheus/alerts.yml }
-    - { src: blackbox.yml,        dest: blackbox/blackbox.yml }
-    - { src: datasource.yml,      dest: grafana/provisioning/datasources/datasource.yml }
-    - { src: dashboards.yml,      dest: grafana/provisioning/dashboards/dashboards.yml }
-  register: monitoring_config
+    src: alerts.yml
+    dest: /etc/prometheus/alerts.yml
+    owner: root
+    group: prometheus
+    mode: "0644"
+    validate: promtool check rules %s
+  notify: restart prometheus
 
-- name: Alertmanager config (contains the webhook from the vault)
+- name: Prometheus configuration (checked with promtool before activating)
   ansible.builtin.template:
-    src: alertmanager.yml.j2
-    dest: /opt/monitoring/alertmanager/alertmanager.yml
-    owner: "65534"                 # the Alertmanager container runs as user nobody (65534)
-    group: "65534"
-    mode: "0440"
-  register: alertmanager_config
+    src: prometheus.yml.j2
+    dest: /etc/prometheus/prometheus.yml
+    owner: root
+    group: prometheus
+    mode: "0644"
+    validate: promtool check config %s
+  notify: restart prometheus
 
-- name: Dashboards as code
+- name: Prometheus running
+  ansible.builtin.systemd:
+    name: prometheus
+    state: started
+    enabled: true
+
+- name: Notification script (contains the webhook, therefore 0700)
+  ansible.builtin.template:
+    src: prometheus-notify.sh.j2
+    dest: /usr/local/sbin/prometheus-notify
+    mode: "0700"
+
+- name: Command backup-status
   ansible.builtin.copy:
-    src: dashboards/
-    dest: /opt/monitoring/grafana/dashboards/
+    src: backup-status.sh
+    dest: /usr/local/bin/backup-status
+    mode: "0755"
 
-- name: Compose file
+- name: systemd service and timer for the notifications
   ansible.builtin.template:
-    src: docker-compose.yml.j2
-    dest: /opt/monitoring/docker-compose.yml
-    mode: "0600"
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+  loop: [prometheus-notify.service, prometheus-notify.timer]
 
-- name: Start stack
-  ansible.builtin.command: docker compose up -d
-  args:
-    chdir: /opt/monitoring
-  register: compose_up
-  changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr or 'Created' in compose_up.stderr"
-
-- name: Reload after config change
-  ansible.builtin.command: docker compose restart prometheus alertmanager blackbox
-  args:
-    chdir: /opt/monitoring
-  when: monitoring_config.changed or alertmanager_config.changed
+- name: Notification timer active
+  ansible.builtin.systemd:
+    name: prometheus-notify.timer
+    state: started
+    enabled: true
+    daemon_reload: true
 

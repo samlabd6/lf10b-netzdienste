@@ -1,0 +1,34 @@
+#!/bin/bash
+# Reads the firing alarms from Prometheus and posts new and resolved alarms to Discord.
+# Replaces Alertmanager. Runs every minute (systemd timer).
+set -uo pipefail                                         # stop on unset variables
+WEBHOOK="{{ alert_discord_webhook }}"                     # Discord webhook from the vault
+STATE_DIR=/var/lib/prometheus-notify                     # remembers which alarms were already sent
+STATE=$STATE_DIR/firing.txt                              # one line per firing alarm
+mkdir -p "$STATE_DIR"                                    # create the folder on the first run
+touch "$STATE"                                           # create the state file on the first run
+
+send() {                                                 # posts one message to Discord
+  [ -z "$WEBHOOK" ] || [ "$WEBHOOK" = "CHANGE_ME" ] && { echo "$1"; return; }   # no webhook: only print
+  jq -n --arg c "$1" '{content: $c}' | curl -s -H 'Content-Type: application/json' -d @- "$WEBHOOK" >/dev/null
+}
+
+# current firing alarms, one line each: "AlarmName host: summary"
+if ! NOW=$(curl -sf http://localhost:9090/api/v1/alerts | jq -r '.data.alerts[] | select(.state=="firing") | "\(.labels.alertname) \(.labels.host // .labels.instance // "-"): \(.annotations.summary // "")"' | sort -u); then
+  if [ ! -f "$STATE_DIR/prom_down" ]; then               # report "Prometheus not reachable" only once
+    send "[CRITICAL] Prometheus on mon01 is not reachable"
+    touch "$STATE_DIR/prom_down"
+  fi
+  exit 1
+fi
+rm -f "$STATE_DIR/prom_down"                             # Prometheus answers again
+
+printf '%s\n' "$NOW" | sed '/^$/d' > "$STATE.new"        # current alarms without empty lines
+comm -13 "$STATE" "$STATE.new" | while read -r line; do  # lines only in the new list = new alarms
+  send "[FIRING] $line"
+done
+comm -23 "$STATE" "$STATE.new" | while read -r line; do  # lines only in the old list = resolved alarms
+  send "[RESOLVED] $line"
+done
+mv "$STATE.new" "$STATE"                                 # remember the current state
+

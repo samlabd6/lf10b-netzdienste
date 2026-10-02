@@ -7,11 +7,6 @@ groups:
         labels: { severity: critical }
         annotations: { summary: "{{ $labels.job }} on {{ $labels.host }} is down" }
 
-      - alert: GrafanaDown
-        expr: probe_success{job="grafana_probe"} == 0
-        for: 2m
-        labels: { severity: warning }
-
   - name: resources
     rules:
       - alert: MemoryHigh
@@ -26,37 +21,34 @@ groups:
         labels: { severity: warning }
         annotations: { summary: "Less than 15 % free on {{ $labels.host }} {{ $labels.mountpoint }}" }
 
-      - alert: DiskWillFillIn24h
-        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}[6h], 24 * 3600) < 0
-        for: 30m
-        labels: { severity: warning }
-        annotations: { summary: "Disk {{ $labels.mountpoint }} on {{ $labels.host }} will be full within 24 h" }
-
   - name: backup
     rules:
+      # Restic: last run failed (per server and target)
       - alert: BackupFailed
         expr: restic_backup_success == 0
         labels: { severity: critical }
         annotations: { summary: "Last backup of {{ $labels.host }} to {{ $labels.repo }} failed" }
 
+      # Restic: no successful backup for more than 2 h
       - alert: BackupTooOld
         expr: time() - restic_last_success_timestamp_seconds > 7200
         for: 5m
         labels: { severity: critical }
         annotations: { summary: "No successful backup of {{ $labels.host }} to {{ $labels.repo }} for more than 2 h" }
 
-  - name: updates
-    rules:
-      - alert: UpdatesPending
-        expr: sum by (host) (apt_upgrades_pending) > 0
-        for: 2d
+      # Restic: a server has never reported a backup (timer not running, script missing)
+      - alert: BackupMetricMissing
+        expr: absent(restic_backup_success{host="net01"}) or absent(restic_backup_success{host="mon01"})
+        for: 2h
         labels: { severity: warning }
-        annotations: { summary: "{{ $labels.host }} has pending updates for more than 2 days" }
+        annotations: { summary: "A server has not reported any backup result for 2 h" }
 
-      - alert: RebootRequired
-        expr: node_reboot_required == 1
-        for: 1d
+      # vzdump: no successful VM image for more than 26 h
+      - alert: VzdumpTooOld
+        expr: time() - vzdump_last_success_timestamp_seconds > 26 * 3600
+        for: 10m
         labels: { severity: warning }
+        annotations: { summary: "No successful VM backup of VM {{ $labels.vmid }} for more than 26 h" }
 
   - name: dhcp
     rules:

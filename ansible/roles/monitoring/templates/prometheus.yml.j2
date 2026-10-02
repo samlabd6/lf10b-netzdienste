@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 15s             # fetch metrics every 15 s
+  evaluation_interval: 15s         # evaluate the alarm rules every 15 s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Prometheus monitors itself
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels: { host: "mon01" }
+
+  # host metrics incl. backup metrics (textfile collector)
+  - job_name: node
+    static_configs:
+      - targets: ["10.10.10.10:9100"]
+        labels: { host: "net01" }
+      - targets: ["10.10.10.20:9100"]
+        labels: { host: "mon01" }
+      - targets: ["10.10.10.1:9100"]
+        labels: { host: "pve" }
+
+  # DHCP metrics
+  - job_name: kea
+    static_configs:
+      - targets: ["10.10.10.10:9547"]
+        labels: { host: "net01" }
+

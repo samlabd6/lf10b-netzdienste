@@ -1,0 +1,8 @@
+[Unit]
+Description=Send Prometheus alarms to Discord
+After=prometheus.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/prometheus-notify
+

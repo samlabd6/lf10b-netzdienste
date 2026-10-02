@@ -1,0 +1,4 @@
+restic_paths_by_host:
+  net01: "/var/lib/kea /etc/kea"
+  mon01: "/etc/prometheus /opt/checkmk /opt/checkmk-backup"
+restic_paths: "{{ restic_paths_by_host[inventory_hostname] | default('/etc') }}"

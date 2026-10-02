@@ -1,0 +1,22 @@
+#!/bin/bash
+# Hourly Restic backup to Backblaze B2; writes the result for the monitoring
+set -uo pipefail
+PROM=/var/lib/prometheus/node-exporter/restic.prom
+HOST="{{ inventory_hostname }}"
+PATHS=""; for p in {{ restic_paths }}; do [ -e "$p" ] && PATHS="$PATHS $p"; done   # only existing paths
+PRUNE=""; [ "$(date +%H)" = "03" ] && PRUNE="--prune"                            # prune once a day
+mkdir -p "$(dirname "$PROM")"; touch "$PROM"
+
+/usr/local/sbin/restic-cloud backup $PATHS --host "$HOST" --tag auto \
+  && /usr/local/sbin/restic-cloud forget --host "$HOST" --keep-hourly 24 --keep-daily 7 --keep-weekly 4 $PRUNE
+OK=$?
+
+NOW=$(date +%s)
+if [ "$OK" -eq 0 ]; then SUCCESS=1; TS=$NOW
+else SUCCESS=0; TS=$(grep -F 'restic_last_success_timestamp_seconds{repo="cloud"}' "$PROM" | awk '{print $2}'); TS=${TS:-0}; fi
+printf '%s\n' \
+  "restic_backup_success{repo=\"cloud\"} $SUCCESS" \
+  "restic_last_run_timestamp_seconds{repo=\"cloud\"} $NOW" \
+  "restic_last_success_timestamp_seconds{repo=\"cloud\"} $TS" > "$PROM.tmp"
+mv "$PROM.tmp" "$PROM"
+exit $OK

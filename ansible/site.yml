@@ -1,25 +1,11 @@
-- hosts: all
-  roles: [common]
+- name: Base setup for all servers
+  hosts: netdienste:monitoring
+  roles: []
 
-- hosts: netdienste
-  roles: [kea, bind, chrony, exporters, restic]
+- name: Network services (Kea DHCP)
+  hosts: netdienste
+  roles: [kea, exporters, restic]
 
-- hosts: monitoring
+- name: Monitoring server
+  hosts: monitoring
   roles: [monitoring, restic]
-- hosts: all
-  roles: [common]
-
-- hosts: netdienste
-  roles: [kea, bind, chrony, exporters, restic]
-
-- hosts: monitoring
-  roles: [monitoring, restic]
-- hosts: all
-  roles: [common]
-
-- hosts: netdienste
-  roles: [kea, bind, chrony, exporters, restic]
-
-- hosts: monitoring
-  roles: [monitoring, restic]
-

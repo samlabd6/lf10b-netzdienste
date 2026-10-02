@@ -1,0 +1,4 @@
+#!/bin/bash
+# restic-cloud: restic against the B2 repository, e.g. "restic-cloud snapshots"
+set -a; . /etc/restic/cloud.env; set +a
+exec restic "$@"
